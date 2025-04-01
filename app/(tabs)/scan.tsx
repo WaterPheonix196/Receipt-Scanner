@@ -2,6 +2,8 @@ import { CameraView, CameraType, useCameraPermissions, BarcodeScanningResult } f
 import React, { useState, useEffect, useRef } from 'react';
 import { Button, StyleSheet, Text, TouchableOpacity, View, Platform, Alert, Modal, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useShoppingContext } from '@/context/ShoppingContext';
+import { Camera, Camera as FlipCamera } from 'lucide-react-native';
 
 type ScanMode = 'barcode' | 'receipt';
 type FlashlightMode = 'on' | 'off';
@@ -12,6 +14,7 @@ export default function ScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [mode, setMode] = useState<ScanMode>('barcode');
   const [flashlight, setFlashlight] = useState<FlashlightMode>('off');
+  const { addToHistory } = useShoppingContext();
 
   // Flag to indicate if we are actively waiting for a single scan result
   const [isActivelyScanning, setIsActivelyScanning] = useState(false);
@@ -26,9 +29,9 @@ export default function ScanScreen() {
   useEffect(() => {
     // Reset processing ref if modal closes or scanning stops
     if (!modalVisible && !isActivelyScanning) {
-        processingScan.current = false;
+      processingScan.current = false;
     }
-  }, [modalVisible, isActivelyScanning])
+  }, [modalVisible, isActivelyScanning]);
 
   if (!permission) {
     return <View />;
@@ -45,113 +48,74 @@ export default function ScanScreen() {
 
   // Called when a barcode is detected by the CameraView
   const handleBarcodeScanned = async (scanningResult: BarcodeScanningResult) => {
-    // 1. Check if we are in the correct mode and actively waiting for a scan
-    // 2. Use ref to prevent race conditions/multiple triggers before state updates
     if (mode !== 'barcode' || !isActivelyScanning || processingScan.current) {
       return;
     }
 
-    // --- CRITICAL SECTION START ---
-    // Immediately mark as processing and disable further scans for this trigger
     processingScan.current = true;
     setIsActivelyScanning(false);
-    // --- CRITICAL SECTION END ---
 
     const { type, data } = scanningResult;
-    console.log(`(PROCESS) Barcode scanned! Type: ${type}, Data: ${data}`); // Log only when processed
-
-    // Construct the API URL using the scanned barcode data
-    const apiUrl = `https://eandata.com/feed/?v=3&mode=json&keycode=AD3684FB67E71F13&find=${data}`;
+    console.log(`Barcode scanned! Type: ${type}, Data: ${data}`);
 
     try {
+      const apiUrl = `https://eandata.com/feed/?v=3&mode=json&keycode=AD3684FB67E71F13&find=${data}`;
       const response = await fetch(apiUrl);
-      // Check if response is ok AND is valid JSON before parsing
+
       if (!response.ok) {
-          throw new Error(`HTTP error: ${response.status}`);
+        throw new Error(`HTTP error: ${response.status}`);
       }
 
       const contentType = response.headers.get("content-type");
       if (contentType && contentType.indexOf("application/json") !== -1) {
-          const productInfo = await response.json();
+        const productInfo = await response.json();
 
-          // Check for API-specific error indicators if necessary
-          if (productInfo.status === 'error') {
-             throw new Error(productInfo.message || 'API returned an error');
-          }
+        if (productInfo.status === 'error') {
+          throw new Error(productInfo.message || 'API returned an error');
+        }
 
-          // Prepare product details from the API response
-          const productData = productInfo.product || {}; // Handle cases where product might be missing
-          const attributes = productData.attributes || {}; // Handle cases where attributes might be missing
+        const productData = productInfo.product || {};
+        const attributes = productData.attributes || {};
 
-          setScannedProduct({
-            product: attributes.product || 'N/A',
-            description: attributes.description || 'N/A',
-            model: attributes.model || 'N/A',
-            brand: attributes.brand || 'N/A',
-            barcode: data // Include barcode for context if needed
-          });
+        setScannedProduct({
+          product: attributes.product || 'N/A',
+          description: attributes.description || 'N/A',
+          model: attributes.model || 'N/A',
+          brand: attributes.brand || 'N/A',
+          barcode: data
+        });
 
-          // Show modal popup with product details
-          setModalVisible(true);
+        setModalVisible(true);
       } else {
-           throw new Error(`Received non-JSON response from API. Content-Type: ${contentType}`);
+        throw new Error(`Received non-JSON response from API. Content-Type: ${contentType}`);
       }
-
     } catch (error: any) {
       console.error("API Fetch Error:", error);
       Alert.alert('Error Fetching Product Info', error.message || 'An unknown error occurred.');
-      // Reset processing flag on error so user can try again
-       processingScan.current = false;
+      processingScan.current = false;
     }
-    // Note: processingScan.current is reset when the modal is closed or if an error occurs
   };
 
-  // When the capture button is pressed: enable scanning temporarily.
   const handleCapture = () => {
-    console.log(`Capture button pressed in ${mode} mode.`);
-    if (mode === 'barcode') {
-        // Only start scanning if not already processing a previous scan
-      if (!processingScan.current) {
-          console.log('Waiting for barcode scan...');
-          setIsActivelyScanning(true);
-          // Optional: Add a timeout to automatically stop scanning if nothing found
-          // setTimeout(() => {
-          //     if (isActivelyScanning) {
-          //         console.log("Scan timed out.");
-          //         setIsActivelyScanning(false);
-          //     }
-          // }, 5000); // e.g., 5 seconds timeout
-      } else {
-          console.log('Already processing a scan, please wait.');
-      }
-
-    } else {
-      alert('Receipt capture not implemented yet.');
+    if (mode === 'barcode' && !processingScan.current) {
+      setIsActivelyScanning(true);
+    } else if (mode === 'receipt') {
+      Alert.alert('Receipt Scanning', 'Receipt scanning feature coming soon!');
     }
   };
 
   const toggleFlashlight = () => {
     setFlashlight(current => (current === 'off' ? 'on' : 'off'));
-    console.log(`Flashlight toggled ${flashlight === 'off' ? 'on' : 'off'}`);
   };
 
-  const openLibrary = () => {
-    console.log('Photo Library button pressed.');
-    alert('Photo Library feature not implemented yet.');
-  };
-
-  // Handle response from modal popup buttons
   const handleModalResponse = (shouldAdd: boolean) => {
-    setModalVisible(false); // Close modal first
-    if (shouldAdd) {
-      // TODO: Integrate with your "recently purchased" list (replace this console log)
-      console.log('Product added to recently purchased:', scannedProduct);
-    } else {
-      console.log('Product not added.');
+    setModalVisible(false);
+    if (shouldAdd && scannedProduct) {
+      addToHistory([scannedProduct.product]);
+      Alert.alert('Success', 'Product added to purchase history!');
     }
-    // Clear product info and reset processing flag AFTER handling modal response
     setScannedProduct(null);
-    processingScan.current = false; // Allow new scans now
+    processingScan.current = false;
   };
 
   return (
@@ -162,19 +126,15 @@ export default function ScanScreen() {
         enableTorch={flashlight === 'on'}
         barcodeScannerSettings={{
           barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e", "qr"],
-          // You might experiment with interval, but the core logic change is more robust
-          // interval: 1000, // Optional: Increase interval if needed, but may slow down detection
         }}
-        // The listener is always attached, but handleBarcodeScanned decides if it should process
         onBarcodeScanned={handleBarcodeScanned}
       />
 
-      {/* Modal Popup for displaying scanned product info */}
       <Modal
         visible={modalVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => handleModalResponse(false)} // Handle back button press on Android
+        onRequestClose={() => handleModalResponse(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -186,26 +146,32 @@ export default function ScanScreen() {
                 <Text style={styles.modalText}>Description: {scannedProduct.description}</Text>
                 <Text style={styles.modalText}>Model: {scannedProduct.model}</Text>
                 <Text style={styles.modalText}>Brand: {scannedProduct.brand}</Text>
-                <Text style={[styles.modalText, {marginTop: 15, fontWeight: 'bold'}]}>Add to recently purchased?</Text>
+                <Text style={[styles.modalText, { marginTop: 15, fontWeight: 'bold' }]}>
+                  Add to purchase history?
+                </Text>
                 <View style={styles.modalButtonsRow}>
-                  <TouchableOpacity style={[styles.modalButton, styles.modalButtonYes]} onPress={() => handleModalResponse(true)}>
+                  <TouchableOpacity 
+                    style={[styles.modalButton, styles.modalButtonYes]} 
+                    onPress={() => handleModalResponse(true)}
+                  >
                     <Text style={styles.modalButtonText}>Yes</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.modalButton, styles.modalButtonNo]} onPress={() => handleModalResponse(false)}>
+                  <TouchableOpacity 
+                    style={[styles.modalButton, styles.modalButtonNo]} 
+                    onPress={() => handleModalResponse(false)}
+                  >
                     <Text style={styles.modalButtonText}>No</Text>
                   </TouchableOpacity>
                 </View>
               </>
             ) : (
-              <Text style={styles.modalText}>Loading product info...</Text> // Should not be visible long
+              <Text style={styles.modalText}>Loading product info...</Text>
             )}
           </View>
         </View>
       </Modal>
 
-      {/* Controls Overlay */}
       <View style={[styles.controlsContainer, { paddingBottom: insets.bottom + 10 }]}>
-        {/* Mode Selector */}
         <View style={styles.modeSelector}>
           <TouchableOpacity onPress={() => setMode('barcode')}>
             <Text style={[styles.modeText, mode === 'barcode' && styles.modeTextActive]}>
@@ -219,30 +185,42 @@ export default function ScanScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Bottom Buttons Row */}
         <View style={styles.buttonsRow}>
-          <TouchableOpacity style={styles.sideButton} onPress={openLibrary} disabled={processingScan.current}>
-             <Text style={styles.iconText}>🖼️</Text>
+          <TouchableOpacity 
+            style={styles.sideButton} 
+            onPress={toggleFlashlight} 
+            disabled={processingScan.current}
+          >
+            <Text style={styles.iconText}>{flashlight === 'on' ? '💡' : '🔦'}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.captureButton} onPress={handleCapture} disabled={processingScan.current}>
-            {/* Add spinner or indicator if processingScan.current is true? */}
+          <TouchableOpacity 
+            style={[styles.captureButton, processingScan.current && styles.captureButtonDisabled]} 
+            onPress={handleCapture} 
+            disabled={processingScan.current}
+          >
+            {isActivelyScanning ? (
+              <Text style={styles.scanningText}>Scanning...</Text>
+            ) : (
+              <Camera color="white" size={32} />
+            )}
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.sideButton} onPress={toggleFlashlight} disabled={processingScan.current}>
-             <Text style={styles.iconText}>{flashlight === 'on' ? '💡' : '🔦'}</Text>
+          <TouchableOpacity 
+            style={styles.sideButton} 
+            onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')} 
+            disabled={processingScan.current}
+          >
+            <FlipCamera color="white" size={24} />
           </TouchableOpacity>
         </View>
-         {/* Optional: Indicate scanning state */}
-         {isActivelyScanning && <Text style={styles.scanningIndicator}>Scanning...</Text>}
       </View>
     </View>
   );
 }
 
-const { height, width } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
-// --- Styles remain largely the same, added scanningIndicator and minor modal button styling ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -260,17 +238,17 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: 20,
     paddingTop: 15,
-    backgroundColor: 'rgba(0,0,0,0.4)', // Slightly dimmed background for controls
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   modeSelector: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 15, // Reduced margin slightly
+    marginBottom: 15,
   },
   modeText: {
     fontSize: 18,
-    color: '#ccc', // Lighter grey
+    color: '#ccc',
     fontWeight: '500',
     paddingHorizontal: 15,
     paddingVertical: 5,
@@ -279,12 +257,13 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     borderBottomWidth: 2,
-    borderBottomColor: '#FF3B30', // Highlight active mode
+    borderBottomColor: '#FF3B30',
   },
   buttonsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 20,
   },
   sideButton: {
     width: 55,
@@ -315,72 +294,71 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  captureButtonDisabled: {
+    opacity: 0.5,
+  },
   iconText: {
     fontSize: 24,
     color: 'white',
   },
-  // Modal styles
+  scanningText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)', // Slightly darker overlay
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20, // Add padding for smaller screens
+    paddingHorizontal: 20,
   },
   modalContainer: {
-    // height: height * 0.7, // Removed fixed height, let content define it
-    maxHeight: height * 0.8, // Max height constraint
-    width: '100%', // Use full width within overlay padding
-    maxWidth: 500, // Max width for larger screens/tablets
+    maxHeight: height * 0.8,
+    width: '100%',
+    maxWidth: 500,
     backgroundColor: 'white',
-    borderRadius: 15, // Slightly softer corners
-    padding: 25, // Increased padding
-    justifyContent: 'space-between', // Ensure buttons are at bottom if content is short
+    borderRadius: 15,
+    padding: 25,
+    justifyContent: 'space-between',
   },
   modalTitle: {
-    fontSize: 24, // Larger title
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 15, // More space below title
+    marginBottom: 15,
     textAlign: 'center',
     color: '#333',
   },
   modalText: {
-    fontSize: 17, // Slightly smaller text for details
-    marginVertical: 5, // Consistent vertical spacing
-    color: '#444', // Darker grey text
-    lineHeight: 24, // Improve readability
+    fontSize: 17,
+    marginVertical: 5,
+    color: '#444',
+    lineHeight: 24,
   },
   modalButtonsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginTop: 25, // More space above buttons
+    marginTop: 25,
     paddingTop: 15,
     borderTopWidth: 1,
-    borderTopColor: '#eee', // Separator line
+    borderTopColor: '#eee',
   },
   modalButton: {
     paddingVertical: 12,
-    paddingHorizontal: 30, // Wider buttons
-    borderRadius: 8, // Softer button corners
-    minWidth: 100, // Minimum width
-    alignItems: 'center', // Center text
+    paddingHorizontal: 30,
+    borderRadius: 8,
+    minWidth: 100,
+    alignItems: 'center',
   },
   modalButtonYes: {
-     backgroundColor: '#4CD964', // Green for 'Yes'
+    backgroundColor: '#4CD964',
   },
   modalButtonNo: {
-     backgroundColor: '#FF3B30', // Red for 'No'
+    backgroundColor: '#FF3B30',
   },
   modalButtonText: {
     color: 'white',
     fontSize: 18,
     fontWeight: '600',
-  },
-  scanningIndicator: {
-      color: 'white',
-      textAlign: 'center',
-      marginTop: 10,
-      fontSize: 16,
-      fontWeight: 'bold',
   },
 });

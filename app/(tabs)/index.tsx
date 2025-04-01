@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Platform } from 'react-native';
 import { Plus, Check, Trash2 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -13,8 +13,6 @@ export default function ShoppingListScreen() {
   const insets = useSafeAreaInsets();
   const [items, setItems] = useState<GroceryItem[]>([]);
   const [newItem, setNewItem] = useState('');
-  const [modalVisible, setModalVisible] = useState(false);
-  const [scannedProduct, setScannedProduct] = useState<any>(null);
 
   const addItem = () => {
     if (newItem.trim()) {
@@ -74,33 +72,6 @@ export default function ShoppingListScreen() {
         )}
         style={styles.list}
       />
-
-      {/* Modal Popup for displaying scanned product info */}
-      <Modal
-        visible={modalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            {scannedProduct ? (
-              <>
-                <Text style={styles.modalTitle}>Product Information</Text>
-                <Text style={styles.modalText}>Product: {scannedProduct.product}</Text>
-                <Text style={styles.modalText}>Description: {scannedProduct.description}</Text>
-                <Text style={styles.modalText}>Model: {scannedProduct.model}</Text>
-                <Text style={styles.modalText}>Brand: {scannedProduct.brand}</Text>
-                <TouchableOpacity style={styles.modalButton} onPress={() => setModalVisible(false)}>
-                  <Text style={styles.modalButtonText}>Close</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <Text style={styles.modalText}>Loading product info...</Text>
-            )}
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -129,6 +100,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 16,
     marginRight: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+      default: {}, // Default case for web
+    }),
   },
   addButton: {
     width: 44,
@@ -137,6 +120,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+      default: {}, // Default case for web
+    }),
   },
   list: {
     flex: 1,
@@ -149,6 +144,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     padding: 16,
     borderRadius: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+      default: {}, // Default case for web
+    }),
   },
   checkbox: {
     width: 24,
@@ -174,38 +181,5 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     padding: 4,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContainer: {
-    width: '80%',
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 20,
-    alignItems: 'center',
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  modalText: {
-    fontSize: 18,
-    marginVertical: 4,
-  },
-  modalButton: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 10,
-    marginTop: 20,
-  },
-  modalButtonText: {
-    color: 'white',
-    fontSize: 18,
   },
 });
