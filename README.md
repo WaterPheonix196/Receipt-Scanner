@@ -1,4 +1,4 @@
-# Receipt-Scanner
+# worthwhile
 
 this is such a skibidi project
 

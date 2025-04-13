@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "receipt-scanner",
-    "slug": "receipt-scanner",
+    "name": "worthwhile",
+    "slug": "worthwhile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
